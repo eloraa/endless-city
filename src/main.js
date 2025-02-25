@@ -5,7 +5,6 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass';
 
-// Add custom shader definition
 const GlowShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -81,7 +80,9 @@ class City {
     this.targetCameraY = 30;
     this.zoomSpeed = 0.8;
     this.lastSectionTime = 0;
-    this.sectionGenerationThreshold = 200;
+    this.sectionGenerationThreshold = 100;
+    this.maxSections = 8;
+    this.minVisibleSections = 4;
     this.composer = null;
     this.glowPass = null;
     this.time = 0;
@@ -96,7 +97,7 @@ class City {
 
   initScene() {
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 2000);
+    this.camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 5000);
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
@@ -108,6 +109,7 @@ class City {
     this.camera.position.set(0, 3000, 20);
     this.camera.lookAt(0, -10, -100);
     this.cameraZ = this.camera.position.z;
+    this.camera.position.x = 10;
   }
 
   initPostProcessing() {
@@ -327,7 +329,9 @@ class City {
     this.camera.rotation.x = this.mouseY * 0.02;
     this.camera.rotation.y = this.mouseX * 0.02;
 
-    if (this.camera.position.z < this.farthestSectionZ + this.sectionLength * 2 && timestamp - this.lastSectionTime > this.sectionGenerationThreshold) {
+    const sectionsAhead = this.citySections.filter(section => section.endZ < this.camera.position.z).length;
+
+    if (sectionsAhead < this.minVisibleSections && timestamp - this.lastSectionTime > this.sectionGenerationThreshold) {
       this.createCitySection(this.farthestSectionZ);
       this.farthestSectionZ -= this.sectionLength;
       this.lastSectionTime = timestamp;
@@ -338,17 +342,21 @@ class City {
   };
 
   cleanupSections() {
-    const removeDistance = this.camera.position.z + this.sectionLength * 2;
-    for (let i = this.citySections.length - 1; i >= 0; i--) {
-      if (this.citySections[i].endZ > removeDistance) {
-        this.citySections[i].group.traverse(child => {
+    const removeDistance = this.camera.position.z + this.sectionLength * 3;
+
+    while (this.citySections.length > this.maxSections) {
+      const furthestSection = this.citySections[this.citySections.length - 1];
+      if (furthestSection.endZ > removeDistance) {
+        furthestSection.group.traverse(child => {
           if (child instanceof THREE.Line && child.geometry.type === 'BufferGeometry') {
             this.roadSegments.push(child);
           }
         });
 
-        this.scene.remove(this.citySections[i].group);
-        this.citySections.splice(i, 1);
+        this.scene.remove(furthestSection.group);
+        this.citySections.pop();
+      } else {
+        break;
       }
     }
   }
@@ -383,19 +391,41 @@ class City {
     controls.style.background = 'rgba(0,0,0,0.5)';
     controls.style.padding = '10px';
     controls.style.borderRadius = '5px';
-    
+
     controls.innerHTML = `
       <div style="margin-bottom: 10px;">
         <label>Glow Amount: <input id="glowAmount" type="range" min="0" max="3" step="0.1" value="2.0"></label>
+        <span id="glowAmountValue">2.0</span>
       </div>
       <div style="margin-bottom: 10px;">
         <label>Glow Size: <input id="glowSize" type="range" min="1" max="10" step="0.5" value="4.0"></label>
+        <span id="glowSizeValue">4.0</span>
       </div>
       <div style="margin-bottom: 10px;">
         <label>Color: <input id="glowColor" type="color" value="#f7d7f3"></label>
+        <span id="glowColorValue">#f7d7f3</span>
       </div>
-      <div>
+      <div style="margin-bottom: 10px;">
         <label><input id="dynamicColor" type="checkbox" checked> Dynamic Color</label>
+      </div>
+      <div style="border-top: 1px solid white; margin: 10px 0; padding-top: 10px;">
+        <h4 style="margin: 0 0 10px 0;">Camera Controls</h4>
+        <div style="margin-bottom: 10px;">
+          <label>Camera X: <input id="cameraX" type="range" min="-100" max="100" step="1" value="0"></label>
+          <span id="cameraXValue">0</span>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <label>Camera Y: <input id="cameraY" type="range" min="10" max="100" step="1" value="30"></label>
+          <span id="cameraYValue">30</span>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <label>Camera Speed: <input id="cameraSpeed" type="range" min="0" max="2" step="0.1" value="0.8"></label>
+          <span id="cameraSpeedValue">0.8</span>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <label>FOV: <input id="cameraFov" type="range" min="20" max="120" step="1" value="90"></label>
+          <span id="cameraFovValue">90</span>
+        </div>
       </div>
     `;
 
@@ -403,30 +433,82 @@ class City {
     const sizeInput = controls.querySelector('#glowSize');
     const colorInput = controls.querySelector('#glowColor');
     const dynamicToggle = controls.querySelector('#dynamicColor');
+    const cameraXInput = controls.querySelector('#cameraX');
+    const cameraYInput = controls.querySelector('#cameraY');
+    const cameraSpeedInput = controls.querySelector('#cameraSpeed');
+    const cameraFovInput = controls.querySelector('#cameraFov');
+
+    const amountValue = controls.querySelector('#glowAmountValue');
+    const sizeValue = controls.querySelector('#glowSizeValue');
+    const colorValue = controls.querySelector('#glowColorValue');
+    const cameraXValue = controls.querySelector('#cameraXValue');
+    const cameraYValue = controls.querySelector('#cameraYValue');
+    const cameraSpeedValue = controls.querySelector('#cameraSpeedValue');
+    const cameraFovValue = controls.querySelector('#cameraFovValue');
+
+    controls.querySelectorAll('span').forEach(span => {
+      span.style.marginLeft = '10px';
+      span.style.fontSize = '0.9em';
+      span.style.opacity = '0.8';
+    });
 
     amountInput.addEventListener('input', e => {
-      this.glowPass.uniforms.glowAmount.value = parseFloat(e.target.value);
+      const value = parseFloat(e.target.value);
+      this.glowPass.uniforms.glowAmount.value = value;
+      amountValue.textContent = value.toFixed(1);
     });
 
     sizeInput.addEventListener('input', e => {
-      this.glowPass.uniforms.glowSize.value = parseFloat(e.target.value);
+      const value = parseFloat(e.target.value);
+      this.glowPass.uniforms.glowSize.value = value;
+      sizeValue.textContent = value.toFixed(1);
     });
 
     colorInput.addEventListener('input', e => {
-      this.glowPass.uniforms.color.value = new THREE.Color(e.target.value);
+      const value = e.target.value;
+      this.glowPass.uniforms.color.value = new THREE.Color(value);
+      colorValue.textContent = value;
     });
 
     dynamicToggle.addEventListener('change', e => {
       this.glowPass.uniforms.isDynamic.value = e.target.checked;
     });
 
+    cameraXInput.addEventListener('input', e => {
+      const value = parseFloat(e.target.value);
+      this.camera.position.x = value;
+      cameraXValue.textContent = value;
+    });
+
+    cameraYInput.addEventListener('input', e => {
+      const value = parseFloat(e.target.value);
+      this.targetCameraY = value;
+      cameraYValue.textContent = value;
+    });
+
+    cameraSpeedInput.addEventListener('input', e => {
+      const value = parseFloat(e.target.value);
+      this.zoomSpeed = value;
+      cameraSpeedValue.textContent = value.toFixed(1);
+    });
+
+    cameraFovInput.addEventListener('input', e => {
+      const value = parseFloat(e.target.value);
+      this.camera.fov = value;
+      this.camera.updateProjectionMatrix();
+      cameraFovValue.textContent = value;
+    });
+
     document.body.appendChild(controls);
   }
 
   start() {
-    this.createCitySection(0);
-    this.createCitySection(-this.sectionLength);
-    this.farthestSectionZ = -this.sectionLength * 2;
+    let currentZ = 0;
+    for (let i = 0; i < this.minVisibleSections; i++) {
+      this.createCitySection(currentZ);
+      currentZ -= this.sectionLength;
+    }
+    this.farthestSectionZ = currentZ;
     this.animate();
   }
 }
