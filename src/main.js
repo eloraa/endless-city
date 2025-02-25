@@ -393,38 +393,60 @@ class City {
     controls.style.borderRadius = '5px';
 
     controls.innerHTML = `
-      <div style="margin-bottom: 10px;">
+      <style>
+        .control-row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 10px;
+          gap: 10px;
+        }
+        .manual-input {
+          width: 60px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.3);
+          color: white;
+          padding: 2px 5px;
+          border-radius: 3px;
+        }
+      </style>
+      <div class="control-row">
         <label>Glow Amount: <input id="glowAmount" type="range" min="0" max="3" step="0.1" value="2.0"></label>
         <span id="glowAmountValue">2.0</span>
+        <input type="number" id="glowAmountManual" class="manual-input" value="2.0" step="0.1">
       </div>
-      <div style="margin-bottom: 10px;">
+      <div class="control-row">
         <label>Glow Size: <input id="glowSize" type="range" min="1" max="10" step="0.5" value="4.0"></label>
         <span id="glowSizeValue">4.0</span>
+        <input type="number" id="glowSizeManual" class="manual-input" value="4.0" step="0.5">
       </div>
-      <div style="margin-bottom: 10px;">
+      <div class="control-row">
         <label>Color: <input id="glowColor" type="color" value="#f7d7f3"></label>
         <span id="glowColorValue">#f7d7f3</span>
       </div>
-      <div style="margin-bottom: 10px;">
+      <div class="control-row">
         <label><input id="dynamicColor" type="checkbox" checked> Dynamic Color</label>
       </div>
       <div style="border-top: 1px solid white; margin: 10px 0; padding-top: 10px;">
         <h4 style="margin: 0 0 10px 0;">Camera Controls</h4>
-        <div style="margin-bottom: 10px;">
+        <div class="control-row">
           <label>Camera X: <input id="cameraX" type="range" min="-100" max="100" step="1" value="0"></label>
           <span id="cameraXValue">0</span>
+          <input type="number" id="cameraXManual" class="manual-input" value="0">
         </div>
-        <div style="margin-bottom: 10px;">
+        <div class="control-row">
           <label>Camera Y: <input id="cameraY" type="range" min="10" max="100" step="1" value="30"></label>
           <span id="cameraYValue">30</span>
+          <input type="number" id="cameraYManual" class="manual-input" value="30">
         </div>
-        <div style="margin-bottom: 10px;">
+        <div class="control-row">
           <label>Camera Speed: <input id="cameraSpeed" type="range" min="0" max="2" step="0.1" value="0.8"></label>
           <span id="cameraSpeedValue">0.8</span>
+          <input type="number" id="cameraSpeedManual" class="manual-input" value="0.8" step="0.1">
         </div>
-        <div style="margin-bottom: 10px;">
+        <div class="control-row">
           <label>FOV: <input id="cameraFov" type="range" min="20" max="120" step="1" value="90"></label>
           <span id="cameraFovValue">90</span>
+          <input type="number" id="cameraFovManual" class="manual-input" value="90">
         </div>
       </div>
     `;
@@ -437,6 +459,13 @@ class City {
     const cameraYInput = controls.querySelector('#cameraY');
     const cameraSpeedInput = controls.querySelector('#cameraSpeed');
     const cameraFovInput = controls.querySelector('#cameraFov');
+
+    const amountManual = controls.querySelector('#glowAmountManual');
+    const sizeManual = controls.querySelector('#glowSizeManual');
+    const cameraXManual = controls.querySelector('#cameraXManual');
+    const cameraYManual = controls.querySelector('#cameraYManual');
+    const cameraSpeedManual = controls.querySelector('#cameraSpeedManual');
+    const cameraFovManual = controls.querySelector('#cameraFovManual');
 
     const amountValue = controls.querySelector('#glowAmountValue');
     const sizeValue = controls.querySelector('#glowSizeValue');
@@ -452,16 +481,31 @@ class City {
       span.style.opacity = '0.8';
     });
 
+    const updateValue = (value, slider, display, manual, toFixed = true) => {
+      slider.value = value;
+      display.textContent = toFixed ? parseFloat(value).toFixed(1) : value;
+      manual.value = value;
+      return parseFloat(value);
+    };
+
     amountInput.addEventListener('input', e => {
-      const value = parseFloat(e.target.value);
+      const value = updateValue(e.target.value, amountInput, amountValue, amountManual);
       this.glowPass.uniforms.glowAmount.value = value;
-      amountValue.textContent = value.toFixed(1);
+    });
+
+    amountManual.addEventListener('change', e => {
+      const value = updateValue(e.target.value, amountInput, amountValue, amountManual);
+      this.glowPass.uniforms.glowAmount.value = value;
     });
 
     sizeInput.addEventListener('input', e => {
-      const value = parseFloat(e.target.value);
+      const value = updateValue(e.target.value, sizeInput, sizeValue, sizeManual);
       this.glowPass.uniforms.glowSize.value = value;
-      sizeValue.textContent = value.toFixed(1);
+    });
+
+    sizeManual.addEventListener('change', e => {
+      const value = updateValue(e.target.value, sizeInput, sizeValue, sizeManual);
+      this.glowPass.uniforms.glowSize.value = value;
     });
 
     colorInput.addEventListener('input', e => {
@@ -475,28 +519,45 @@ class City {
     });
 
     cameraXInput.addEventListener('input', e => {
-      const value = parseFloat(e.target.value);
+      const value = updateValue(e.target.value, cameraXInput, cameraXValue, cameraXManual, false);
       this.camera.position.x = value;
-      cameraXValue.textContent = value;
+    });
+
+    cameraXManual.addEventListener('change', e => {
+      const value = updateValue(e.target.value, cameraXInput, cameraXValue, cameraXManual, false);
+      this.camera.position.x = value;
     });
 
     cameraYInput.addEventListener('input', e => {
-      const value = parseFloat(e.target.value);
+      const value = updateValue(e.target.value, cameraYInput, cameraYValue, cameraYManual, false);
       this.targetCameraY = value;
-      cameraYValue.textContent = value;
+    });
+
+    cameraYManual.addEventListener('change', e => {
+      const value = updateValue(e.target.value, cameraYInput, cameraYValue, cameraYManual, false);
+      this.targetCameraY = value;
     });
 
     cameraSpeedInput.addEventListener('input', e => {
-      const value = parseFloat(e.target.value);
+      const value = updateValue(e.target.value, cameraSpeedInput, cameraSpeedValue, cameraSpeedManual);
       this.zoomSpeed = value;
-      cameraSpeedValue.textContent = value.toFixed(1);
+    });
+
+    cameraSpeedManual.addEventListener('change', e => {
+      const value = updateValue(e.target.value, cameraSpeedInput, cameraSpeedValue, cameraSpeedManual);
+      this.zoomSpeed = value;
     });
 
     cameraFovInput.addEventListener('input', e => {
-      const value = parseFloat(e.target.value);
+      const value = updateValue(e.target.value, cameraFovInput, cameraFovValue, cameraFovManual, false);
       this.camera.fov = value;
       this.camera.updateProjectionMatrix();
-      cameraFovValue.textContent = value;
+    });
+
+    cameraFovManual.addEventListener('change', e => {
+      const value = updateValue(e.target.value, cameraFovInput, cameraFovValue, cameraFovManual, false);
+      this.camera.fov = value;
+      this.camera.updateProjectionMatrix();
     });
 
     document.body.appendChild(controls);
